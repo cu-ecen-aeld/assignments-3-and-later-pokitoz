@@ -1,5 +1,10 @@
 #include "systemcalls.h"
-
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 /**
  * @param cmd the command to execute with system()
  * @return true if the command in @param cmd was executed
@@ -9,15 +14,9 @@
 */
 bool do_system(const char *cmd)
 {
+    int retval = system(cmd);
 
-/*
- * TODO  add your code here
- *  Call the system() function with the command set in the cmd
- *   and return a boolean true if the system() call completed with success
- *   or false() if it returned a failure
-*/
-
-    return true;
+    return retval == 0;
 }
 
 /**
@@ -49,19 +48,21 @@ bool do_exec(int count, ...)
     // and may be removed
     command[count] = command[count];
 
-/*
- * TODO:
- *   Execute a system command by calling fork, execv(),
- *   and wait instead of system (see LSP page 161).
- *   Use the command[0] as the full path to the command to execute
- *   (first argument to execv), and use the remaining arguments
- *   as second argument to the execv() command.
- *
-*/
+
+    int child = fork();
+    if (child == 0)
+    {
+        execv(command[0], command);
+        // should not happen
+        return 1;
+    }
+
+    int status = 0;
+    pid_t pid = wait(&status);
 
     va_end(args);
 
-    return true;
+    return pid != -1 && status == 0;
 }
 
 /**
@@ -93,7 +94,25 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *
 */
 
-    va_end(args);
+    int kidpid;
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    if (fd < 0) { perror("open"); abort(); }
+    switch (kidpid = fork()) {
+    case -1: perror("fork"); abort();
+    case 0:
+        if (dup2(fd, 1) < 0) { perror("dup2"); abort(); }
+        close(fd);
+        execvp(command[0], command); perror("execvp"); abort();
+    default:
+        close(fd);
 
-    return true;
+        int status = 0;
+        pid_t pid = wait(&status);
+        return pid != -1 && status == 0;
+
+    }
+
+    va_end(args);
+    return false;
+
 }
