@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/sh -e
 
 if [ -z "$1" ] || [ -z "$2" ]; then
     echo "Error: Missing arguments"
