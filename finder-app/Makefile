@@ -1,8 +1,9 @@
 CROSS_COMPILE?=
 
+all: writer
+
 writer: writer.c
 	$(CROSS_COMPILE)gcc -o writer writer.c -Wall -Wextra -Werror
-
 
 clean: writer
 	rm -f writer
