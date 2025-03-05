@@ -1,0 +1,18 @@
+#!/bin/sh
+
+case "$1" in
+  start)
+    echo "Starting the server"
+    start-stop-deamon -S -n aesdsocket -d
+    ;;
+  stop)
+    echo "Stopping the server"
+    start-stop-deamon -K -n aesdsocket
+    ;;
+  *)
+    echo "Usage: {start|stop}"
+    exit 1
+    ;;
+esac
+
+exit 0
