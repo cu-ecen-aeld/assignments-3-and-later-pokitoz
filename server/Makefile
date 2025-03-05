@@ -1,4 +1,4 @@
-CROSS_COMPILE ?= arm-linux-gnueabihf-
+CROSS_COMPILE ?= aarch64-linux-gnu-
 CFLAGS = -Wall -Werror -g
 default: all
 all:
