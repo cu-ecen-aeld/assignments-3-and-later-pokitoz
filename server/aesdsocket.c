@@ -76,13 +76,17 @@ void signal_handler(int signal)
  */
 void signal_timer_handler(int signal)
 {
-    // char prefix[] = "timestamp:";
+    time_t rawtime;
+    time(&rawtime);
+    struct tm *timeinfo = localtime(&rawtime);
+
+    char prefix[] = "timestamp:";
     if (fp != NULL)
     {
         pthread_mutex_lock(&lock);
-        // fwrite(prefix, sizeof(char), strlen(prefix), fp);
-        // fwrite(asctime(timeinfo), sizeof(char), strlen(asctime(timeinfo)), fp);
-        // fflush(fp);
+         fwrite(prefix, sizeof(char), strlen(prefix), fp);
+         fwrite(asctime(timeinfo), sizeof(char), strlen(asctime(timeinfo)), fp);
+         fflush(fp);
         pthread_mutex_unlock(&lock);
     }
 
