@@ -13,10 +13,17 @@
 #include <syslog.h>
 #include <stdbool.h>
 
-static bool end = false;
+static volatile bool end = false;
 int retval = -1;
 const char C_FILEPATH [] = "/var/tmp/aesdsocketdata";
+const char C_PORT[] = "9000";
+const int C_CONNECTION_REQUEST_QUEUE_SIZE = 10;
 
+/**
+ * Return the IP Address of the client depending if it is ipv4 or ipv6
+ * @param sa
+ * @return pointer to the ip address array. Valid until sa is valid
+ */
 void* get_in_addr(struct sockaddr_storage* sa)
 {
     if (((struct sockaddr*) sa)->sa_family == AF_INET) {
@@ -26,6 +33,10 @@ void* get_in_addr(struct sockaddr_storage* sa)
     return &(((struct sockaddr_in6*) sa)->sin6_addr);
 }
 
+/**
+ * Callback function to handle a specific signal
+ * @param signal signal caught
+ */
 void signal_handler(int signal)
 {
     syslog(LOG_INFO, "Caught signal, exiting");
@@ -55,8 +66,7 @@ int main(int argc, char** argv)
         hints.ai_flags = AI_PASSIVE;
         struct addrinfo* servinfo;
 
-
-        retval = getaddrinfo(NULL, "9000", &hints, &servinfo);
+        retval = getaddrinfo(NULL, C_PORT, &hints, &servinfo);
         if (retval != 0) {
             syslog(LOG_ERR, "getaddrinfo: %s", gai_strerror(retval));
             retval = -1;
@@ -70,11 +80,15 @@ int main(int argc, char** argv)
             if (listenFd == -1)
             {
                 syslog (LOG_ERR, "server: socket: %s", gai_strerror(retval));
+                // Try to find other address
                 continue;
             }
 
-            int yes = 1;
-            if (setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+            // Enable reusable address
+            const int reuseAddr = 1;
+            retval = setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &reuseAddr, sizeof(reuseAddr));
+            if (retval == -1)
+            {
                 syslog (LOG_ERR, "sock flag issue");
                 break;
             }
@@ -118,8 +132,8 @@ int main(int argc, char** argv)
         }
 
         // We binded successfully and now we need to fork
-
-        if (listen(listenFd, 10) == -1) {
+        if (listen(listenFd, C_CONNECTION_REQUEST_QUEUE_SIZE) == -1)
+        {
             perror("listen");
             exit(-1);
         }
@@ -135,13 +149,8 @@ int main(int argc, char** argv)
             break;
         }
 
-        if (sigaction(SIGINT, &sa, NULL) == -1)
-        {
-            syslog(LOG_ERR, "sigaction");
-            break;
-        }
-
-        if (sigaction(SIGTERM, &sa, NULL) == -1)
+        if ((sigaction(SIGINT, &sa, NULL) == -1) ||
+            (sigaction(SIGTERM, &sa, NULL) == -1))
         {
             syslog(LOG_ERR, "sigaction");
             break;
@@ -154,23 +163,21 @@ int main(int argc, char** argv)
             break;
         }
 
-
         struct sockaddr_storage their_addr;
         socklen_t sinSize = sizeof(their_addr);
         char strIp[INET6_ADDRSTRLEN] = {0};
 
-
         while(!end)
         {
             new_fd = accept(listenFd, (struct sockaddr *)&their_addr, &sinSize);
-            if (new_fd == -1) {
+            if (new_fd == -1)
+            {
                 syslog(LOG_ERR, "Accept issue");
                 break;
             }
 
-            inet_ntop(their_addr.ss_family,
-                get_in_addr(&their_addr),
-                strIp, sizeof(strIp));
+            inet_ntop(their_addr.ss_family, get_in_addr(&their_addr),
+                      strIp, sizeof(strIp));
 
             syslog(LOG_INFO, "Accepted connection from %s", strIp);
             char buf[1024] = {0};
@@ -178,11 +185,6 @@ int main(int argc, char** argv)
             while(!end)
             {
                 int numbytes = recv(new_fd, buf, sizeof(buf) - 1, 0);
-
-                if (end)
-                {
-                    break;
-                }
 
                 if (numbytes == -1)
                 {
@@ -207,12 +209,17 @@ int main(int argc, char** argv)
                 }
             }
 
-            printf("now we send back\n");
+            // Read back the file and send it through the socket
+
             int numbytes = 1;
             while (numbytes > 0)
             {
                 numbytes = fread(buf, sizeof(char), sizeof(buf), fp);
-                printf("now we send back %d\n", numbytes);
+                if (numbytes == 0)
+                {
+                    // There is nothing to send
+                    break;
+                }
 
                 // Send the data back
                 if (send(new_fd, buf, numbytes, 0) == -1)
@@ -235,7 +242,8 @@ int main(int argc, char** argv)
 
     if (end)
     {
-        if (remove(C_FILEPATH) != 0) {
+        if (remove(C_FILEPATH) != 0)
+        {
             syslog(LOG_ERR, "Failed to remove file");
         }
     }
