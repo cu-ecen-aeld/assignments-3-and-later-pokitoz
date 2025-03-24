@@ -1,0 +1,8 @@
+[Unit]
+Description=Service to start a socket server
+
+[Service]
+ExecStart=/bin/aesdsocket -d
+
+[Install]
+WantedBy=multi-user.target
