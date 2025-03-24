@@ -1,13 +1,40 @@
 #!/bin/sh
 
+# Source function library.
+. /etc/init.d/functions
+
+start() {
+  # code to start app comes here
+  # insert any kernel modules prior to
+  # executing/spawning any process that depends
+  # on the LKM
+  echo "Starting the server"
+  start-stop-daemon -S -n aesdsocket --startas /usr/bin/aesdsocket -- -d
+}
+
+stop() {
+  # code to stop app comes here
+  # example: killproc program_name
+  # Kill all the process started in start() function
+  # remove any LKM inserted using insmod in start()
+  echo "Stopping the server"
+  start-stop-daemon -K -n aesdsocket
+}
+
 case "$1" in
   start)
-    echo "Starting the server"
-    start-stop-daemon -S -n aesdsocket --startas /usr/bin/aesdsocket -- -d
+    start
     ;;
   stop)
-    echo "Stopping the server"
-    start-stop-daemon -K -n aesdsocket
+    stop
+    ;;
+  restart)
+    stop
+    start
+    ;;
+  status)
+    # code to check status of app comes here
+    # example: status program_name
     ;;
   *)
     echo "Usage: {start|stop}"
