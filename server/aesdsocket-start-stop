@@ -1,8 +1,5 @@
 #!/bin/sh
 
-# Source function library.
-. /etc/init.d/functions
-
 start() {
   # code to start app comes here
   # insert any kernel modules prior to
