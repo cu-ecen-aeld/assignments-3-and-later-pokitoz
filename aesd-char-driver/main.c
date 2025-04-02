@@ -65,55 +65,65 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 
     // lock mutex
     PDEBUG("Lock read");
-    mutex_lock(&aesd_device.mutex);
+    retval = mutex_lock_interruptible(&aesd_device.mutex);
 
-    size_t entry_offset_byte_rtn = 0;
-    struct aesd_buffer_entry *entry = aesd_circular_buffer_find_entry_offset_for_fpos(
-        &aesd_device.buffer, *f_pos, &entry_offset_byte_rtn);
-
-    if (entry == NULL)
+    if (retval == 0)
     {
-        PDEBUG("No entry found");
-        retval = -ENODATA;
-        goto end;
-    }
 
-    size_t j = 0;
-    for (size_t i = 0; i < count; i++)
-    {
-        if ((entry_offset_byte_rtn + j) >= entry->size)
+
+        size_t entry_offset_byte_rtn = 0;
+        struct aesd_buffer_entry *entry = aesd_circular_buffer_find_entry_offset_for_fpos(
+            &aesd_device.buffer, *f_pos, &entry_offset_byte_rtn);
+
+        if (entry == NULL)
         {
-            PDEBUG("End of entry %d %d/%d %d", i, j, entry->size, retval);
-            // Get the next one
-            entry = aesd_circular_buffer_find_entry_offset_for_fpos(
-                &aesd_device.buffer, *f_pos + i, &entry_offset_byte_rtn);
-            if (entry == NULL)
-            {
-                PDEBUG("No new entry found, exiting");
-                break;
-            }
-
-            // There is an entry, but does it work ?
-            j = 0;
-        }
-
-        if (copy_to_user(buf + i, entry->buffptr + entry_offset_byte_rtn + j, 1))
-        {
-            PDEBUG("Error copying to user");
-            retval = -EFAULT;
+            PDEBUG("No entry found");
+            retval = -ENODATA;
             goto end;
         }
 
-        j++;
-        retval++;
+        size_t j = 0;
+        for (size_t i = 0; i < count; i++)
+        {
+            if ((entry_offset_byte_rtn + j) >= entry->size)
+            {
+                PDEBUG("End of entry %d %d/%d %d", i, j, entry->size, retval);
+                // Get the next one
+                entry = aesd_circular_buffer_find_entry_offset_for_fpos(
+                    &aesd_device.buffer, *f_pos + i, &entry_offset_byte_rtn);
+                if (entry == NULL)
+                {
+                    PDEBUG("No new entry found, exiting");
+                    break;
+                }
+
+                // There is an entry, but does it work ?
+                j = 0;
+            }
+
+            if (copy_to_user(buf + i, entry->buffptr + entry_offset_byte_rtn + j, 1))
+            {
+                PDEBUG("Error copying to user");
+                retval = -EFAULT;
+                goto end;
+            }
+
+            j++;
+            retval++;
+        }
+        *f_pos = retval;
+
+
     }
-    *f_pos = retval;
 
-    PDEBUG("Unlock read");
-
-    mutex_unlock(&aesd_device.mutex);
 
 end:
+
+    if (retval != -EINTR)
+    {
+        PDEBUG("Unlock read");
+        mutex_unlock(&aesd_device.mutex);
+    }
     return retval;
 }
 
@@ -125,62 +135,73 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     PDEBUG("write %zu bytes with offset %lld", count, *f_pos);
 
     PDEBUG("Lock write");
-    mutex_lock(&aesd_device.mutex);
+    retval = mutex_lock_interruptible(&aesd_device.mutex);
 
-    if (start)
+    if (retval == 0)
     {
-        start = false;
-        PDEBUG("First write");
-
-        aesd_device.allocatedBuffer = kmalloc(AESD_CIRCULAR_BUFFER_SIZE, GFP_KERNEL);
-        if(aesd_device.allocatedBuffer == NULL){
-            PDEBUG("Error allocating memory");
-            retval = -ENOMEM;
-            goto end;
-        }
-
-        aesd_device.current_entry_c.buffptr = aesd_device.allocatedBuffer;
-        aesd_device.current_entry_c.size = 0;
-    }
-
-    PDEBUG("Copy to %p %d", aesd_device.allocatedBuffer, count);
-
-    if(copy_from_user(aesd_device.allocatedBuffer, buf, count)){
-        PDEBUG("Error copying from user");
-        retval = -EFAULT;
-        goto error;
-    }
-
-    if (aesd_device.current_entry_c.size + count > AESD_CIRCULAR_BUFFER_SIZE)
-    {
-        PDEBUG("Buffer full");
-        goto error;
-    }
-    aesd_device.current_entry_c.size += count;
-    retval = count;
-
-    if (buf[count-1] == '\n')
-    {
-        PDEBUG("End of line");
-        void* bufferToFree = aesd_circular_buffer_add_entry(&aesd_device.buffer, &aesd_device.current_entry_c);
-        if (bufferToFree != NULL)
+        if (start)
         {
-            kfree(bufferToFree);
+            start = false;
+            PDEBUG("First write");
+
+            aesd_device.allocatedBuffer = kmalloc(AESD_CIRCULAR_BUFFER_SIZE, GFP_KERNEL);
+            if(aesd_device.allocatedBuffer == NULL){
+                PDEBUG("Error allocating memory");
+                retval = -ENOMEM;
+                goto end;
+            }
+
+            aesd_device.current_entry_c.buffptr = aesd_device.allocatedBuffer;
+            aesd_device.current_entry_c.size = 0;
         }
 
-        start = true;
+        PDEBUG("Copy to %p %d", aesd_device.allocatedBuffer, count);
+
+        if(copy_from_user(aesd_device.allocatedBuffer + aesd_device.current_entry_c.size, buf, count)){
+            PDEBUG("Error copying from user");
+            retval = -EFAULT;
+            goto error;
+        }
+
+        if (aesd_device.current_entry_c.size + count > AESD_CIRCULAR_BUFFER_SIZE)
+        {
+            PDEBUG("Buffer full");
+            goto error;
+        }
+        aesd_device.current_entry_c.size += count;
+        retval = count;
+
+        if (buf[count-1] == '\n')
+        {
+            PDEBUG("End of line");
+            void* bufferToFree = aesd_circular_buffer_add_entry(&aesd_device.buffer, &aesd_device.current_entry_c);
+            if (bufferToFree != NULL)
+            {
+                kfree(bufferToFree);
+            }
+
+            start = true;
+        }
+
+
+
+
+        goto end;
+
     }
 
-    goto end;
 
 error:
     kfree(aesd_device.allocatedBuffer);
     start = true;
 
-    PDEBUG("Unlock write");
-    mutex_unlock(&aesd_device.mutex);
-
 end:
+    if (retval != -EINTR)
+    {
+        PDEBUG("Unlock write");
+        mutex_unlock(&aesd_device.mutex);
+    }
+
     return retval;
 }
 struct file_operations aesd_fops = {
@@ -218,7 +239,7 @@ int aesd_init_module(void)
         printk(KERN_WARNING "Can't get major %d\n", aesd_major);
         return result;
     }
-    memset(&aesd_device,0,sizeof(struct aesd_dev));
+    memset(&aesd_device, 0, sizeof(struct aesd_dev));
     // init mutex
     mutex_init(&aesd_device.mutex);
 
