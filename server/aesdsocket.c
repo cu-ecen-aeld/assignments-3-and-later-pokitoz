@@ -349,7 +349,6 @@ int main(int argc, char **argv)
             break;
         }
 
-        timer_start();
 
         int id = 0;
         while (!end)
