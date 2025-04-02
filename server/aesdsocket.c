@@ -428,13 +428,6 @@ int main(int argc, char **argv)
         fclose(fp);
     }
 
-    if (end)
-    {
-        if (remove(C_FILEPATH) != 0)
-        {
-            syslog(LOG_ERR, "Failed to remove file");
-        }
-    }
     if (listenFd != -1)
     {
         close(listenFd);
