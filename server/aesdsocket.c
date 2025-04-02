@@ -18,7 +18,7 @@
 
 static volatile bool end = false;
 int retval = -1;
-const char C_FILEPATH[] = "/var/tmp/aesdsocketdata";
+const char C_FILEPATH[] = "/dev/aesdchar";
 const char C_PORT[] = "9000";
 const int C_CONNECTION_REQUEST_QUEUE_SIZE = 10;
 pthread_mutex_t lock;
