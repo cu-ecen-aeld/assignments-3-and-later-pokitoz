@@ -26,8 +26,6 @@
 #include <linux/mutex.h>
 #include "aesd-circular-buffer.h"
 
-#define AESD_CIRCULAR_BUFFER_SIZE 10000
-
 struct aesd_dev
 {
     /**
